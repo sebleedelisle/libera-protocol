@@ -292,13 +292,15 @@ Requirements:
 
 ## Scanner-sync control
 
-Scanner sync should be a control value applied by the ingest endpoint after
-decoding points and before sending to hardware.
+Scanner sync is a control value applied by the ingest endpoint after decoding
+points and before sending to hardware.
 
-Proposed message:
+`SET_SCANNER_SYNC` payload:
 
 ```text
-SET_SCANNER_SYNC(offset_ns, flags)
+int64  offset_ns
+uint8  enabled
+uint8  reserved[3]
 ```
 
 Requirements:
@@ -306,7 +308,8 @@ Requirements:
 - The offset is signed and expressed in nanoseconds, not points.
 - The receiver converts the time offset to a point delay using the active frame
   or stream point rate.
-- Positive and negative semantics must be documented before implementation.
+- Positive values delay colour samples relative to geometry by `offset_ns`.
+- Receivers that cannot apply negative offsets should clamp them to zero.
 - The receiver reports the accepted/clamped value in status.
 - Frames should not contain pre-shifted colour samples when scanner sync is
   active. The point stream should stay geometrically and chromatically aligned

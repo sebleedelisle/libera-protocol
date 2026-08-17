@@ -104,6 +104,11 @@ struct StreamConfig {
     std::uint16_t flags = 0;
 };
 
+struct ScannerSync {
+    std::int64_t offsetNs = 0;
+    bool enabled = true;
+};
+
 struct Hello {
     std::string senderName;
     StreamMode requestedStreamMode = StreamMode::RawPointStream;

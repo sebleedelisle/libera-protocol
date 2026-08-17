@@ -100,6 +100,20 @@ void Receiver::dispatchRecord(const Record& record) {
         }
         break;
     }
+    case RecordType::SetScannerSync: {
+        ScannerSync scannerSync;
+        if (!decodeScannerSync(record.payload.data(),
+                               record.payload.size(),
+                               scannerSync,
+                               error)) {
+            reportError(error);
+            return;
+        }
+        if (callbacksValue.onScannerSync) {
+            callbacksValue.onScannerSync(scannerSync);
+        }
+        break;
+    }
     case RecordType::FrameMarker: {
         FrameMarker marker;
         if (!decodeFrameMarker(record.payload.data(), record.payload.size(), marker, error)) {

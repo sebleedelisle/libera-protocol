@@ -43,6 +43,12 @@ bool decodeStreamConfig(const std::uint8_t* data,
                         StreamConfig& config,
                         std::string& error);
 
+std::vector<std::uint8_t> encodeScannerSync(const ScannerSync& scannerSync);
+bool decodeScannerSync(const std::uint8_t* data,
+                       std::size_t size,
+                       ScannerSync& scannerSync,
+                       std::string& error);
+
 std::vector<std::uint8_t> encodeHello(const Hello& hello);
 bool decodeHello(const std::uint8_t* data,
                  std::size_t size,

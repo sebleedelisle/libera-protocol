@@ -34,6 +34,10 @@ std::vector<std::uint8_t> Sender::makeStreamConfig(const StreamConfig& config) {
     return makeRecord(RecordType::StreamConfig, encodeStreamConfig(config));
 }
 
+std::vector<std::uint8_t> Sender::makeScannerSync(const ScannerSync& scannerSync) {
+    return makeRecord(RecordType::SetScannerSync, encodeScannerSync(scannerSync));
+}
+
 std::vector<std::uint8_t> Sender::makeFrameMarker(const FrameMarker& marker) {
     return makeRecord(RecordType::FrameMarker, encodeFrameMarker(marker));
 }

@@ -64,6 +64,26 @@ void testPointRoundTrip() {
     assert(decoded[0].user == point.user);
 }
 
+void testScannerSyncRoundTrip() {
+    ScannerSync scannerSync;
+    scannerSync.offsetNs = 237500;
+    scannerSync.enabled = true;
+
+    const auto payload = encodeScannerSync(scannerSync);
+    ScannerSync decoded;
+    std::string error;
+    assert(decodeScannerSync(payload.data(), payload.size(), decoded, error));
+    assert(decoded.offsetNs == scannerSync.offsetNs);
+    assert(decoded.enabled == scannerSync.enabled);
+
+    scannerSync.offsetNs = -50000;
+    scannerSync.enabled = false;
+    const auto negativePayload = encodeScannerSync(scannerSync);
+    assert(decodeScannerSync(negativePayload.data(), negativePayload.size(), decoded, error));
+    assert(decoded.offsetNs == scannerSync.offsetNs);
+    assert(!decoded.enabled);
+}
+
 void testSenderReceiver() {
     Sender sender(2);
     Receiver receiver(2);
@@ -71,6 +91,7 @@ void testSenderReceiver() {
     bool sawHello = false;
     bool sawAccept = false;
     bool sawConfig = false;
+    bool sawScannerSync = false;
     bool sawMarker = false;
     bool sawPoints = false;
     bool sawStatus = false;
@@ -93,6 +114,11 @@ void testSenderReceiver() {
         sawConfig = true;
         assert(config.defaultPointRate == 30000);
         assert(config.userChannelCount == 2);
+    };
+    callbacks.onScannerSync = [&](const ScannerSync& scannerSync) {
+        sawScannerSync = true;
+        assert(scannerSync.offsetNs == 175000);
+        assert(scannerSync.enabled);
     };
     callbacks.onFrameMarker = [&](const FrameMarker& marker) {
         sawMarker = true;
@@ -135,6 +161,10 @@ void testSenderReceiver() {
     config.streamMode = StreamMode::FrameByCount;
     config.userChannelCount = 2;
 
+    ScannerSync scannerSync;
+    scannerSync.offsetNs = 175000;
+    scannerSync.enabled = true;
+
     FrameMarker marker;
     marker.frameId = 9;
     marker.framePointCount = 2;
@@ -156,12 +186,14 @@ void testSenderReceiver() {
     const auto helloBytes = sender.makeHello(hello);
     const auto acceptBytes = sender.makeAccept(accept);
     const auto configBytes = sender.makeStreamConfig(config);
+    const auto scannerSyncBytes = sender.makeScannerSync(scannerSync);
     const auto markerBytes = sender.makeFrameMarker(marker);
     const auto pointBytes = sender.makePoints({a, b});
     const auto statusBytes = sender.makeStatus(status);
     bytes.insert(bytes.end(), helloBytes.begin(), helloBytes.end());
     bytes.insert(bytes.end(), acceptBytes.begin(), acceptBytes.end());
     bytes.insert(bytes.end(), configBytes.begin(), configBytes.end());
+    bytes.insert(bytes.end(), scannerSyncBytes.begin(), scannerSyncBytes.end());
     bytes.insert(bytes.end(), markerBytes.begin(), markerBytes.end());
     bytes.insert(bytes.end(), pointBytes.begin(), pointBytes.end());
     bytes.insert(bytes.end(), statusBytes.begin(), statusBytes.end());
@@ -173,6 +205,7 @@ void testSenderReceiver() {
     assert(sawHello);
     assert(sawAccept);
     assert(sawConfig);
+    assert(sawScannerSync);
     assert(sawMarker);
     assert(sawPoints);
     assert(sawStatus);
@@ -213,6 +246,7 @@ void testDiscoveryAdvertisement() {
 int main() {
     testRecordRoundTrip();
     testPointRoundTrip();
+    testScannerSyncRoundTrip();
     testSenderReceiver();
     testDiscoveryAdvertisement();
     return 0;

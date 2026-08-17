@@ -1,6 +1,7 @@
 #include "libera/protocol/Codec.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 namespace libera::protocol {
@@ -8,6 +9,7 @@ namespace {
 
 constexpr std::size_t frameMarkerPayloadSize = 28;
 constexpr std::size_t streamConfigPayloadSize = 10;
+constexpr std::size_t scannerSyncPayloadSize = 12;
 constexpr std::size_t helloFixedPayloadSize = 16;
 constexpr std::size_t acceptPayloadSize = 32;
 constexpr std::size_t statusFixedPayloadSize = 18;
@@ -21,6 +23,25 @@ void appendStringBytes(std::vector<std::uint8_t>& output,
                        const std::string& value,
                        std::uint16_t size) {
     output.insert(output.end(), value.begin(), value.begin() + size);
+}
+
+void appendInt64(std::vector<std::uint8_t>& output, std::int64_t value) {
+    appendUInt64(output, static_cast<std::uint64_t>(value));
+}
+
+std::int64_t readInt64(const std::uint8_t* data) {
+    const std::uint64_t value = readUInt64(data);
+    constexpr auto maxInt64 =
+        static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+    constexpr auto minInt64 =
+        maxInt64 + 1u;
+    if (value <= maxInt64) {
+        return static_cast<std::int64_t>(value);
+    }
+    if (value == minInt64) {
+        return std::numeric_limits<std::int64_t>::min();
+    }
+    return -static_cast<std::int64_t>((~value) + 1u);
 }
 
 } // namespace
@@ -248,6 +269,30 @@ bool decodeStreamConfig(const std::uint8_t* data,
     config.streamMode = static_cast<StreamMode>(readUInt16(data + 4));
     config.userChannelCount = data[6];
     config.flags = readUInt16(data + 8);
+    return true;
+}
+
+std::vector<std::uint8_t> encodeScannerSync(const ScannerSync& scannerSync) {
+    std::vector<std::uint8_t> output;
+    output.reserve(scannerSyncPayloadSize);
+    appendInt64(output, scannerSync.offsetNs);
+    output.push_back(scannerSync.enabled ? 1 : 0);
+    output.push_back(0);
+    output.push_back(0);
+    output.push_back(0);
+    return output;
+}
+
+bool decodeScannerSync(const std::uint8_t* data,
+                       std::size_t size,
+                       ScannerSync& scannerSync,
+                       std::string& error) {
+    if (data == nullptr || size != scannerSyncPayloadSize) {
+        error = "invalid scanner sync payload size";
+        return false;
+    }
+    scannerSync.offsetNs = readInt64(data);
+    scannerSync.enabled = data[8] != 0;
     return true;
 }
 
