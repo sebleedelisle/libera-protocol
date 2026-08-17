@@ -16,6 +16,10 @@ std::uint32_t readUInt32(const std::uint8_t* data);
 std::uint64_t readUInt64(const std::uint8_t* data);
 
 std::vector<std::uint8_t> encodeRecord(const Record& record);
+bool decodeRecordHeader(const std::uint8_t* data,
+                        std::size_t size,
+                        RecordHeader& header,
+                        std::string& error);
 DecodeResult decodeRecord(const std::uint8_t* data, std::size_t size);
 
 std::size_t pointSampleSize(std::uint8_t userChannelCount);
@@ -45,5 +49,23 @@ bool decodeHello(const std::uint8_t* data,
                  Hello& hello,
                  std::string& error);
 
-} // namespace libera::protocol
+std::vector<std::uint8_t> encodeAccept(const Accept& accept);
+bool decodeAccept(const std::uint8_t* data,
+                  std::size_t size,
+                  Accept& accept,
+                  std::string& error);
 
+std::vector<std::uint8_t> encodeStatus(const Status& status);
+bool decodeStatus(const std::uint8_t* data,
+                  std::size_t size,
+                  Status& status,
+                  std::string& error);
+
+std::vector<std::uint8_t> encodeDiscoveryAdvertisement(
+    const DiscoveryAdvertisement& advertisement);
+bool decodeDiscoveryAdvertisement(const std::uint8_t* data,
+                                  std::size_t size,
+                                  DiscoveryAdvertisement& advertisement,
+                                  std::string& error);
+
+} // namespace libera::protocol

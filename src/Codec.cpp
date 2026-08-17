@@ -9,6 +9,19 @@ namespace {
 constexpr std::size_t frameMarkerPayloadSize = 28;
 constexpr std::size_t streamConfigPayloadSize = 10;
 constexpr std::size_t helloFixedPayloadSize = 16;
+constexpr std::size_t acceptPayloadSize = 32;
+constexpr std::size_t statusFixedPayloadSize = 18;
+constexpr std::size_t discoveryFixedPayloadSize = 36;
+
+std::uint16_t clampedStringSize(const std::string& value) {
+    return static_cast<std::uint16_t>(std::min<std::size_t>(value.size(), 65535u));
+}
+
+void appendStringBytes(std::vector<std::uint8_t>& output,
+                       const std::string& value,
+                       std::uint16_t size) {
+    output.insert(output.end(), value.begin(), value.begin() + size);
+}
 
 } // namespace
 
@@ -57,6 +70,26 @@ std::vector<std::uint8_t> encodeRecord(const Record& record) {
     return output;
 }
 
+bool decodeRecordHeader(const std::uint8_t* data,
+                        std::size_t size,
+                        RecordHeader& header,
+                        std::string& error) {
+    if (data == nullptr) {
+        error = "null record buffer";
+        return false;
+    }
+    if (size < RECORD_HEADER_SIZE) {
+        error = "incomplete record header";
+        return false;
+    }
+
+    header.type = static_cast<RecordType>(readUInt16(data));
+    header.flags = readUInt16(data + 2);
+    header.payloadSize = readUInt32(data + 4);
+    header.sequence = readUInt32(data + 8);
+    return true;
+}
+
 DecodeResult decodeRecord(const std::uint8_t* data, std::size_t size) {
     DecodeResult result;
     if (data == nullptr) {
@@ -69,8 +102,15 @@ DecodeResult decodeRecord(const std::uint8_t* data, std::size_t size) {
         return result;
     }
 
-    const auto payloadSize = readUInt32(data + 4);
-    const std::size_t totalSize = RECORD_HEADER_SIZE + static_cast<std::size_t>(payloadSize);
+    RecordHeader header;
+    std::string error;
+    if (!decodeRecordHeader(data, size, header, error)) {
+        result.status = DecodeStatus::Invalid;
+        result.error = error;
+        return result;
+    }
+
+    const std::size_t totalSize = RECORD_HEADER_SIZE + static_cast<std::size_t>(header.payloadSize);
     if (totalSize < RECORD_HEADER_SIZE) {
         result.status = DecodeStatus::Invalid;
         result.error = "record size overflow";
@@ -83,9 +123,9 @@ DecodeResult decodeRecord(const std::uint8_t* data, std::size_t size) {
 
     result.status = DecodeStatus::Complete;
     result.bytesConsumed = totalSize;
-    result.record.type = static_cast<RecordType>(readUInt16(data));
-    result.record.flags = readUInt16(data + 2);
-    result.record.sequence = readUInt32(data + 8);
+    result.record.type = header.type;
+    result.record.flags = header.flags;
+    result.record.sequence = header.sequence;
     result.record.payload.assign(data + RECORD_HEADER_SIZE, data + totalSize);
     return result;
 }
@@ -212,8 +252,7 @@ bool decodeStreamConfig(const std::uint8_t* data,
 }
 
 std::vector<std::uint8_t> encodeHello(const Hello& hello) {
-    const auto nameSize =
-        static_cast<std::uint16_t>(std::min<std::size_t>(hello.senderName.size(), 65535u));
+    const auto nameSize = clampedStringSize(hello.senderName);
     std::vector<std::uint8_t> output;
     output.reserve(helloFixedPayloadSize + nameSize);
     appendUInt32(output, PROTOCOL_MAGIC);
@@ -224,7 +263,7 @@ std::vector<std::uint8_t> encodeHello(const Hello& hello) {
     output.push_back(0);
     appendUInt32(output, hello.defaultPointRate);
     appendUInt16(output, nameSize);
-    output.insert(output.end(), hello.senderName.begin(), hello.senderName.begin() + nameSize);
+    appendStringBytes(output, hello.senderName, nameSize);
     return output;
 }
 
@@ -256,6 +295,158 @@ bool decodeHello(const std::uint8_t* data,
     hello.defaultPointRate = readUInt32(data + 10);
     hello.senderName.assign(reinterpret_cast<const char*>(data + helloFixedPayloadSize),
                             nameSize);
+    return true;
+}
+
+std::vector<std::uint8_t> encodeAccept(const Accept& accept) {
+    std::vector<std::uint8_t> output;
+    output.reserve(acceptPayloadSize);
+    appendUInt16(output, static_cast<std::uint16_t>(accept.acceptedStreamMode));
+    output.push_back(accept.acceptedUserChannelCount);
+    output.push_back(0);
+    appendUInt32(output, accept.defaultPointRate);
+    appendUInt32(output, accept.maxPointRate);
+    appendUInt32(output, accept.maxFramePointCount);
+    appendUInt32(output, accept.maxRecordPayloadSize);
+    appendUInt64(output, accept.sessionId);
+    appendUInt32(output, accept.featureFlags);
+    return output;
+}
+
+bool decodeAccept(const std::uint8_t* data,
+                  std::size_t size,
+                  Accept& accept,
+                  std::string& error) {
+    if (data == nullptr || size != acceptPayloadSize) {
+        error = "invalid accept payload size";
+        return false;
+    }
+    accept.acceptedStreamMode = static_cast<StreamMode>(readUInt16(data));
+    accept.acceptedUserChannelCount = data[2];
+    accept.defaultPointRate = readUInt32(data + 4);
+    accept.maxPointRate = readUInt32(data + 8);
+    accept.maxFramePointCount = readUInt32(data + 12);
+    accept.maxRecordPayloadSize = readUInt32(data + 16);
+    accept.sessionId = readUInt64(data + 20);
+    accept.featureFlags = readUInt32(data + 28);
+    return true;
+}
+
+std::vector<std::uint8_t> encodeStatus(const Status& status) {
+    const auto messageSize = clampedStringSize(status.message);
+    std::vector<std::uint8_t> output;
+    output.reserve(statusFixedPayloadSize + messageSize);
+    appendUInt16(output, status.code);
+    appendUInt16(output, 0);
+    appendUInt32(output, status.queuedPoints);
+    appendUInt32(output, status.queuedFrames);
+    appendUInt32(output, status.featureFlags);
+    appendUInt16(output, messageSize);
+    appendStringBytes(output, status.message, messageSize);
+    return output;
+}
+
+bool decodeStatus(const std::uint8_t* data,
+                  std::size_t size,
+                  Status& status,
+                  std::string& error) {
+    if (data == nullptr || size < statusFixedPayloadSize) {
+        error = "invalid status payload size";
+        return false;
+    }
+    const auto messageSize = readUInt16(data + 16);
+    if (size != statusFixedPayloadSize + static_cast<std::size_t>(messageSize)) {
+        error = "status message length does not match payload size";
+        return false;
+    }
+    status.code = readUInt16(data);
+    status.queuedPoints = readUInt32(data + 4);
+    status.queuedFrames = readUInt32(data + 8);
+    status.featureFlags = readUInt32(data + 12);
+    status.message.assign(reinterpret_cast<const char*>(data + statusFixedPayloadSize),
+                          messageSize);
+    return true;
+}
+
+std::vector<std::uint8_t> encodeDiscoveryAdvertisement(
+    const DiscoveryAdvertisement& advertisement) {
+    const auto endpointIdSize = clampedStringSize(advertisement.endpointId);
+    const auto displayNameSize = clampedStringSize(advertisement.displayName);
+    const auto endpointTypeSize = clampedStringSize(advertisement.endpointType);
+    const auto addressSize = clampedStringSize(advertisement.address);
+
+    std::vector<std::uint8_t> output;
+    output.reserve(discoveryFixedPayloadSize + endpointIdSize + displayNameSize +
+                   endpointTypeSize + addressSize);
+    appendUInt32(output, PROTOCOL_MAGIC);
+    output.push_back(PROTOCOL_VERSION_MAJOR);
+    output.push_back(PROTOCOL_VERSION_MINOR);
+    appendUInt16(output, advertisement.tcpPort);
+    appendUInt16(output, advertisement.supportedStreamModes);
+    output.push_back(advertisement.maxUserChannelCount);
+    output.push_back(0);
+    appendUInt32(output, advertisement.minPointRate);
+    appendUInt32(output, advertisement.maxPointRate);
+    appendUInt32(output, advertisement.maxFramePointCount);
+    appendUInt32(output, advertisement.featureFlags);
+    appendUInt16(output, endpointIdSize);
+    appendUInt16(output, displayNameSize);
+    appendUInt16(output, endpointTypeSize);
+    appendUInt16(output, addressSize);
+    appendStringBytes(output, advertisement.endpointId, endpointIdSize);
+    appendStringBytes(output, advertisement.displayName, displayNameSize);
+    appendStringBytes(output, advertisement.endpointType, endpointTypeSize);
+    appendStringBytes(output, advertisement.address, addressSize);
+    return output;
+}
+
+bool decodeDiscoveryAdvertisement(const std::uint8_t* data,
+                                  std::size_t size,
+                                  DiscoveryAdvertisement& advertisement,
+                                  std::string& error) {
+    if (data == nullptr || size < discoveryFixedPayloadSize) {
+        error = "invalid discovery advertisement payload size";
+        return false;
+    }
+    if (readUInt32(data) != PROTOCOL_MAGIC) {
+        error = "invalid discovery magic";
+        return false;
+    }
+    if (data[4] != PROTOCOL_VERSION_MAJOR) {
+        error = "unsupported discovery protocol major version";
+        return false;
+    }
+
+    const auto endpointIdSize = readUInt16(data + 28);
+    const auto displayNameSize = readUInt16(data + 30);
+    const auto endpointTypeSize = readUInt16(data + 32);
+    const auto addressSize = readUInt16(data + 34);
+    const auto expectedSize = discoveryFixedPayloadSize +
+                              static_cast<std::size_t>(endpointIdSize) +
+                              static_cast<std::size_t>(displayNameSize) +
+                              static_cast<std::size_t>(endpointTypeSize) +
+                              static_cast<std::size_t>(addressSize);
+    if (size != expectedSize) {
+        error = "discovery string lengths do not match payload size";
+        return false;
+    }
+
+    advertisement.tcpPort = readUInt16(data + 6);
+    advertisement.supportedStreamModes = readUInt16(data + 8);
+    advertisement.maxUserChannelCount = data[10];
+    advertisement.minPointRate = readUInt32(data + 12);
+    advertisement.maxPointRate = readUInt32(data + 16);
+    advertisement.maxFramePointCount = readUInt32(data + 20);
+    advertisement.featureFlags = readUInt32(data + 24);
+
+    const std::uint8_t* cursor = data + discoveryFixedPayloadSize;
+    advertisement.endpointId.assign(reinterpret_cast<const char*>(cursor), endpointIdSize);
+    cursor += endpointIdSize;
+    advertisement.displayName.assign(reinterpret_cast<const char*>(cursor), displayNameSize);
+    cursor += displayNameSize;
+    advertisement.endpointType.assign(reinterpret_cast<const char*>(cursor), endpointTypeSize);
+    cursor += endpointTypeSize;
+    advertisement.address.assign(reinterpret_cast<const char*>(cursor), addressSize);
     return true;
 }
 

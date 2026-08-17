@@ -16,11 +16,14 @@ public:
     std::uint8_t getUserChannelCount() const;
 
     std::vector<std::uint8_t> makeHello(const Hello& hello);
+    std::vector<std::uint8_t> makeAccept(const Accept& accept);
     std::vector<std::uint8_t> makeReady();
     std::vector<std::uint8_t> makeStreamConfig(const StreamConfig& config);
     std::vector<std::uint8_t> makeFrameMarker(const FrameMarker& marker);
     std::vector<std::uint8_t> makePoints(const std::vector<PointSample>& points);
+    std::vector<std::uint8_t> makeStatus(const Status& status);
     std::vector<std::uint8_t> makePing(std::uint64_t timestampNs);
+    std::vector<std::uint8_t> makePong(std::uint64_t timestampNs);
     std::vector<std::uint8_t> makeClose();
 
 private:
@@ -33,4 +36,3 @@ private:
 };
 
 } // namespace libera::protocol
-

@@ -11,6 +11,8 @@ inline constexpr std::uint32_t PROTOCOL_MAGIC = 0x4c494250u; // "LIBP"
 inline constexpr std::uint8_t PROTOCOL_VERSION_MAJOR = 0;
 inline constexpr std::uint8_t PROTOCOL_VERSION_MINOR = 1;
 inline constexpr std::size_t RECORD_HEADER_SIZE = 12;
+inline constexpr std::uint16_t DEFAULT_DISCOVERY_PORT = 45425;
+inline constexpr std::uint16_t DEFAULT_SESSION_PORT = 45426;
 
 enum class RecordType : std::uint16_t {
     Hello = 0x0001,
@@ -42,6 +44,14 @@ enum class StreamMode : std::uint16_t {
     FrameByNextMarker = 4,
 };
 
+enum SessionFeatureFlags : std::uint32_t {
+    FeatureTargetBeginTime = 1u << 0,
+    FeatureRepeatLastFrame = 1u << 1,
+    FeatureScannerSync = 1u << 2,
+    FeatureStatus = 1u << 3,
+    FeatureManufacturerPrivate = 1u << 4,
+};
+
 enum class DecodeStatus {
     Complete,
     Incomplete,
@@ -53,6 +63,13 @@ struct Record {
     std::uint16_t flags = 0;
     std::uint32_t sequence = 0;
     std::vector<std::uint8_t> payload;
+};
+
+struct RecordHeader {
+    RecordType type = RecordType::Error;
+    std::uint16_t flags = 0;
+    std::uint32_t payloadSize = 0;
+    std::uint32_t sequence = 0;
 };
 
 struct DecodeResult {
@@ -94,5 +111,41 @@ struct Hello {
     std::uint32_t defaultPointRate = 0;
 };
 
-} // namespace libera::protocol
+struct Accept {
+    StreamMode acceptedStreamMode = StreamMode::RawPointStream;
+    std::uint8_t acceptedUserChannelCount = 0;
+    std::uint32_t defaultPointRate = 0;
+    std::uint32_t maxPointRate = 0;
+    std::uint32_t maxFramePointCount = 0;
+    std::uint32_t maxRecordPayloadSize = 0;
+    std::uint64_t sessionId = 0;
+    std::uint32_t featureFlags = 0;
+};
 
+struct Status {
+    std::uint16_t code = 0;
+    std::uint32_t queuedPoints = 0;
+    std::uint32_t queuedFrames = 0;
+    std::uint32_t featureFlags = 0;
+    std::string message;
+};
+
+struct DiscoveryAdvertisement {
+    std::string endpointId;
+    std::string displayName;
+    std::string endpointType;
+    std::string address;
+    std::uint16_t tcpPort = DEFAULT_SESSION_PORT;
+    std::uint16_t supportedStreamModes = 0;
+    std::uint8_t maxUserChannelCount = 0;
+    std::uint32_t minPointRate = 0;
+    std::uint32_t maxPointRate = 0;
+    std::uint32_t maxFramePointCount = 0;
+    std::uint32_t featureFlags = 0;
+};
+
+inline constexpr std::uint16_t streamModeMask(StreamMode mode) {
+    return static_cast<std::uint16_t>(1u << static_cast<std::uint16_t>(mode));
+}
+
+} // namespace libera::protocol

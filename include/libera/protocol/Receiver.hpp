@@ -12,9 +12,11 @@ namespace libera::protocol {
 struct ReceiverCallbacks {
     std::function<void(const Record&)> onRecord;
     std::function<void(const Hello&)> onHello;
+    std::function<void(const Accept&)> onAccept;
     std::function<void(const StreamConfig&)> onStreamConfig;
     std::function<void(const FrameMarker&)> onFrameMarker;
     std::function<void(const std::vector<PointSample>&)> onPoints;
+    std::function<void(const Status&)> onStatus;
     std::function<void(const std::string&)> onError;
 };
 
@@ -40,4 +42,3 @@ private:
 };
 
 } // namespace libera::protocol
-

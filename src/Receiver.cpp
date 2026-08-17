@@ -76,6 +76,18 @@ void Receiver::dispatchRecord(const Record& record) {
         }
         break;
     }
+    case RecordType::Accept: {
+        Accept accept;
+        if (!decodeAccept(record.payload.data(), record.payload.size(), accept, error)) {
+            reportError(error);
+            return;
+        }
+        userChannelCountValue = accept.acceptedUserChannelCount;
+        if (callbacksValue.onAccept) {
+            callbacksValue.onAccept(accept);
+        }
+        break;
+    }
     case RecordType::StreamConfig: {
         StreamConfig config;
         if (!decodeStreamConfig(record.payload.data(), record.payload.size(), config, error)) {
@@ -96,6 +108,17 @@ void Receiver::dispatchRecord(const Record& record) {
         }
         if (callbacksValue.onFrameMarker) {
             callbacksValue.onFrameMarker(marker);
+        }
+        break;
+    }
+    case RecordType::Status: {
+        Status status;
+        if (!decodeStatus(record.payload.data(), record.payload.size(), status, error)) {
+            reportError(error);
+            return;
+        }
+        if (callbacksValue.onStatus) {
+            callbacksValue.onStatus(status);
         }
         break;
     }

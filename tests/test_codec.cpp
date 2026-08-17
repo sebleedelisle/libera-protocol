@@ -28,6 +28,14 @@ void testRecordRoundTrip() {
 
     const auto partial = decodeRecord(bytes.data(), bytes.size() - 1);
     assert(partial.status == DecodeStatus::Incomplete);
+
+    RecordHeader header;
+    std::string error;
+    assert(decodeRecordHeader(bytes.data(), RECORD_HEADER_SIZE, header, error));
+    assert(header.type == record.type);
+    assert(header.flags == record.flags);
+    assert(header.sequence == record.sequence);
+    assert(header.payloadSize == record.payload.size());
 }
 
 void testPointRoundTrip() {
@@ -61,9 +69,11 @@ void testSenderReceiver() {
     Receiver receiver(2);
 
     bool sawHello = false;
+    bool sawAccept = false;
     bool sawConfig = false;
     bool sawMarker = false;
     bool sawPoints = false;
+    bool sawStatus = false;
     std::string error;
 
     ReceiverCallbacks callbacks;
@@ -72,6 +82,12 @@ void testSenderReceiver() {
         sawHello = true;
         assert(hello.senderName == "test-sender");
         assert(hello.requestedStreamMode == StreamMode::FrameByCount);
+    };
+    callbacks.onAccept = [&](const Accept& accept) {
+        sawAccept = true;
+        assert(accept.acceptedStreamMode == StreamMode::FrameByCount);
+        assert(accept.acceptedUserChannelCount == 2);
+        assert(accept.sessionId == 123);
     };
     callbacks.onStreamConfig = [&](const StreamConfig& config) {
         sawConfig = true;
@@ -90,6 +106,12 @@ void testSenderReceiver() {
         assert(points[1].user.size() == 2);
         assert(points[1].user[1] == 456);
     };
+    callbacks.onStatus = [&](const Status& status) {
+        sawStatus = true;
+        assert(status.code == 2);
+        assert(status.queuedFrames == 4);
+        assert(status.message == "warming");
+    };
     receiver.setCallbacks(callbacks);
 
     Hello hello;
@@ -97,6 +119,16 @@ void testSenderReceiver() {
     hello.requestedStreamMode = StreamMode::FrameByCount;
     hello.requestedUserChannelCount = 2;
     hello.defaultPointRate = 30000;
+
+    Accept accept;
+    accept.acceptedStreamMode = StreamMode::FrameByCount;
+    accept.acceptedUserChannelCount = 2;
+    accept.defaultPointRate = 30000;
+    accept.maxPointRate = 60000;
+    accept.maxFramePointCount = 4096;
+    accept.maxRecordPayloadSize = 65536;
+    accept.sessionId = 123;
+    accept.featureFlags = FeatureTargetBeginTime | FeatureStatus;
 
     StreamConfig config;
     config.defaultPointRate = 30000;
@@ -115,30 +147,73 @@ void testSenderReceiver() {
     b.x = 1234;
     b.user = {123, 456};
 
+    Status status;
+    status.code = 2;
+    status.queuedFrames = 4;
+    status.message = "warming";
+
     std::vector<std::uint8_t> bytes;
     const auto helloBytes = sender.makeHello(hello);
+    const auto acceptBytes = sender.makeAccept(accept);
     const auto configBytes = sender.makeStreamConfig(config);
     const auto markerBytes = sender.makeFrameMarker(marker);
     const auto pointBytes = sender.makePoints({a, b});
+    const auto statusBytes = sender.makeStatus(status);
     bytes.insert(bytes.end(), helloBytes.begin(), helloBytes.end());
+    bytes.insert(bytes.end(), acceptBytes.begin(), acceptBytes.end());
     bytes.insert(bytes.end(), configBytes.begin(), configBytes.end());
     bytes.insert(bytes.end(), markerBytes.begin(), markerBytes.end());
     bytes.insert(bytes.end(), pointBytes.begin(), pointBytes.end());
+    bytes.insert(bytes.end(), statusBytes.begin(), statusBytes.end());
 
     receiver.feed(bytes.data(), 5);
     receiver.feed(bytes.data() + 5, bytes.size() - 5);
 
     assert(error.empty());
     assert(sawHello);
+    assert(sawAccept);
     assert(sawConfig);
     assert(sawMarker);
     assert(sawPoints);
+    assert(sawStatus);
+}
+
+void testDiscoveryAdvertisement() {
+    DiscoveryAdvertisement advertisement;
+    advertisement.endpointId = "endpoint-1";
+    advertisement.displayName = "Libera Link Target";
+    advertisement.endpointType = "virtual";
+    advertisement.address = "192.168.1.20";
+    advertisement.tcpPort = 45430;
+    advertisement.supportedStreamModes = streamModeMask(StreamMode::RawPointStream) |
+                                         streamModeMask(StreamMode::FrameByCount);
+    advertisement.maxUserChannelCount = 2;
+    advertisement.minPointRate = 1000;
+    advertisement.maxPointRate = 60000;
+    advertisement.maxFramePointCount = 8192;
+    advertisement.featureFlags = FeatureTargetBeginTime | FeatureScannerSync;
+
+    const auto payload = encodeDiscoveryAdvertisement(advertisement);
+    DiscoveryAdvertisement decoded;
+    std::string error;
+    assert(decodeDiscoveryAdvertisement(payload.data(), payload.size(), decoded, error));
+    assert(decoded.endpointId == advertisement.endpointId);
+    assert(decoded.displayName == advertisement.displayName);
+    assert(decoded.endpointType == advertisement.endpointType);
+    assert(decoded.address == advertisement.address);
+    assert(decoded.tcpPort == advertisement.tcpPort);
+    assert(decoded.supportedStreamModes == advertisement.supportedStreamModes);
+    assert(decoded.maxUserChannelCount == advertisement.maxUserChannelCount);
+    assert(decoded.minPointRate == advertisement.minPointRate);
+    assert(decoded.maxPointRate == advertisement.maxPointRate);
+    assert(decoded.maxFramePointCount == advertisement.maxFramePointCount);
+    assert(decoded.featureFlags == advertisement.featureFlags);
 }
 
 int main() {
     testRecordRoundTrip();
     testPointRoundTrip();
     testSenderReceiver();
+    testDiscoveryAdvertisement();
     return 0;
 }
-
