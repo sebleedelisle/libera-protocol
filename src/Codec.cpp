@@ -12,6 +12,7 @@ constexpr std::size_t streamConfigPayloadSize = 10;
 constexpr std::size_t scannerSyncPayloadSize = 12;
 constexpr std::size_t helloFixedPayloadSize = 16;
 constexpr std::size_t acceptPayloadSize = 32;
+constexpr std::size_t rejectFixedPayloadSize = 4;
 constexpr std::size_t statusFixedPayloadSize = 18;
 constexpr std::size_t discoveryFixedPayloadSize = 36;
 
@@ -377,6 +378,36 @@ bool decodeAccept(const std::uint8_t* data,
     return true;
 }
 
+std::vector<std::uint8_t> encodeReject(const Reject& reject) {
+    const auto messageSize = clampedStringSize(reject.message);
+    std::vector<std::uint8_t> output;
+    output.reserve(rejectFixedPayloadSize + messageSize);
+    appendUInt16(output, static_cast<std::uint16_t>(reject.code));
+    appendUInt16(output, messageSize);
+    appendStringBytes(output, reject.message, messageSize);
+    return output;
+}
+
+bool decodeReject(const std::uint8_t* data,
+                  std::size_t size,
+                  Reject& reject,
+                  std::string& error) {
+    if (data == nullptr || size < rejectFixedPayloadSize) {
+        error = "invalid reject payload size";
+        return false;
+    }
+    const auto messageSize = readUInt16(data + 2);
+    if (size != rejectFixedPayloadSize + static_cast<std::size_t>(messageSize)) {
+        error = "reject message length does not match payload size";
+        return false;
+    }
+
+    reject.code = static_cast<RejectCode>(readUInt16(data));
+    reject.message.assign(reinterpret_cast<const char*>(data + rejectFixedPayloadSize),
+                          messageSize);
+    return true;
+}
+
 std::vector<std::uint8_t> encodeStatus(const Status& status) {
     const auto messageSize = clampedStringSize(status.message);
     std::vector<std::uint8_t> output;
@@ -429,7 +460,7 @@ std::vector<std::uint8_t> encodeDiscoveryAdvertisement(
     appendUInt16(output, advertisement.tcpPort);
     appendUInt16(output, advertisement.supportedStreamModes);
     output.push_back(advertisement.maxUserChannelCount);
-    output.push_back(0);
+    output.push_back(static_cast<std::uint8_t>(advertisement.availability));
     appendUInt32(output, advertisement.minPointRate);
     appendUInt32(output, advertisement.maxPointRate);
     appendUInt32(output, advertisement.maxFramePointCount);
@@ -479,6 +510,7 @@ bool decodeDiscoveryAdvertisement(const std::uint8_t* data,
     advertisement.tcpPort = readUInt16(data + 6);
     advertisement.supportedStreamModes = readUInt16(data + 8);
     advertisement.maxUserChannelCount = data[10];
+    advertisement.availability = static_cast<EndpointAvailability>(data[11]);
     advertisement.minPointRate = readUInt32(data + 12);
     advertisement.maxPointRate = readUInt32(data + 16);
     advertisement.maxFramePointCount = readUInt32(data + 20);

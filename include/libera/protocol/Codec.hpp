@@ -61,6 +61,12 @@ bool decodeAccept(const std::uint8_t* data,
                   Accept& accept,
                   std::string& error);
 
+std::vector<std::uint8_t> encodeReject(const Reject& reject);
+bool decodeReject(const std::uint8_t* data,
+                  std::size_t size,
+                  Reject& reject,
+                  std::string& error);
+
 std::vector<std::uint8_t> encodeStatus(const Status& status);
 bool decodeStatus(const std::uint8_t* data,
                   std::size_t size,

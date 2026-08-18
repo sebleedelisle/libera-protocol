@@ -90,6 +90,7 @@ void testSenderReceiver() {
 
     bool sawHello = false;
     bool sawAccept = false;
+    bool sawReject = false;
     bool sawConfig = false;
     bool sawScannerSync = false;
     bool sawMarker = false;
@@ -109,6 +110,11 @@ void testSenderReceiver() {
         assert(accept.acceptedStreamMode == StreamMode::FrameByCount);
         assert(accept.acceptedUserChannelCount == 2);
         assert(accept.sessionId == 123);
+    };
+    callbacks.onReject = [&](const Reject& reject) {
+        sawReject = true;
+        assert(reject.code == RejectCode::Busy);
+        assert(reject.message == "busy");
     };
     callbacks.onStreamConfig = [&](const StreamConfig& config) {
         sawConfig = true;
@@ -156,6 +162,10 @@ void testSenderReceiver() {
     accept.sessionId = 123;
     accept.featureFlags = FeatureTargetBeginTime | FeatureStatus;
 
+    Reject reject;
+    reject.code = RejectCode::Busy;
+    reject.message = "busy";
+
     StreamConfig config;
     config.defaultPointRate = 30000;
     config.streamMode = StreamMode::FrameByCount;
@@ -185,6 +195,7 @@ void testSenderReceiver() {
     std::vector<std::uint8_t> bytes;
     const auto helloBytes = sender.makeHello(hello);
     const auto acceptBytes = sender.makeAccept(accept);
+    const auto rejectBytes = sender.makeReject(reject);
     const auto configBytes = sender.makeStreamConfig(config);
     const auto scannerSyncBytes = sender.makeScannerSync(scannerSync);
     const auto markerBytes = sender.makeFrameMarker(marker);
@@ -192,6 +203,7 @@ void testSenderReceiver() {
     const auto statusBytes = sender.makeStatus(status);
     bytes.insert(bytes.end(), helloBytes.begin(), helloBytes.end());
     bytes.insert(bytes.end(), acceptBytes.begin(), acceptBytes.end());
+    bytes.insert(bytes.end(), rejectBytes.begin(), rejectBytes.end());
     bytes.insert(bytes.end(), configBytes.begin(), configBytes.end());
     bytes.insert(bytes.end(), scannerSyncBytes.begin(), scannerSyncBytes.end());
     bytes.insert(bytes.end(), markerBytes.begin(), markerBytes.end());
@@ -204,6 +216,7 @@ void testSenderReceiver() {
     assert(error.empty());
     assert(sawHello);
     assert(sawAccept);
+    assert(sawReject);
     assert(sawConfig);
     assert(sawScannerSync);
     assert(sawMarker);
@@ -220,6 +233,7 @@ void testDiscoveryAdvertisement() {
     advertisement.tcpPort = 45430;
     advertisement.supportedStreamModes = streamModeMask(StreamMode::RawPointStream) |
                                          streamModeMask(StreamMode::FrameByCount);
+    advertisement.availability = EndpointAvailability::Busy;
     advertisement.maxUserChannelCount = 2;
     advertisement.minPointRate = 1000;
     advertisement.maxPointRate = 60000;
@@ -236,6 +250,7 @@ void testDiscoveryAdvertisement() {
     assert(decoded.address == advertisement.address);
     assert(decoded.tcpPort == advertisement.tcpPort);
     assert(decoded.supportedStreamModes == advertisement.supportedStreamModes);
+    assert(decoded.availability == advertisement.availability);
     assert(decoded.maxUserChannelCount == advertisement.maxUserChannelCount);
     assert(decoded.minPointRate == advertisement.minPointRate);
     assert(decoded.maxPointRate == advertisement.maxPointRate);

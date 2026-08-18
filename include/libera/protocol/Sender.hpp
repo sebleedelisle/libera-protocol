@@ -17,6 +17,7 @@ public:
 
     std::vector<std::uint8_t> makeHello(const Hello& hello);
     std::vector<std::uint8_t> makeAccept(const Accept& accept);
+    std::vector<std::uint8_t> makeReject(const Reject& reject);
     std::vector<std::uint8_t> makeReady();
     std::vector<std::uint8_t> makeStreamConfig(const StreamConfig& config);
     std::vector<std::uint8_t> makeScannerSync(const ScannerSync& scannerSync);

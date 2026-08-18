@@ -44,6 +44,21 @@ enum class StreamMode : std::uint16_t {
     FrameByNextMarker = 4,
 };
 
+enum class EndpointAvailability : std::uint8_t {
+    Available = 0,
+    Busy = 1,
+    Disabled = 2,
+    Fault = 3,
+};
+
+enum class RejectCode : std::uint16_t {
+    UnsupportedVersion = 1,
+    Busy = 2,
+    MalformedHello = 3,
+    UnsupportedMode = 4,
+    InternalError = 5,
+};
+
 enum SessionFeatureFlags : std::uint32_t {
     FeatureTargetBeginTime = 1u << 0,
     FeatureRepeatLastFrame = 1u << 1,
@@ -127,6 +142,11 @@ struct Accept {
     std::uint32_t featureFlags = 0;
 };
 
+struct Reject {
+    RejectCode code = RejectCode::InternalError;
+    std::string message;
+};
+
 struct Status {
     std::uint16_t code = 0;
     std::uint32_t queuedPoints = 0;
@@ -142,6 +162,7 @@ struct DiscoveryAdvertisement {
     std::string address;
     std::uint16_t tcpPort = DEFAULT_SESSION_PORT;
     std::uint16_t supportedStreamModes = 0;
+    EndpointAvailability availability = EndpointAvailability::Available;
     std::uint8_t maxUserChannelCount = 0;
     std::uint32_t minPointRate = 0;
     std::uint32_t maxPointRate = 0;

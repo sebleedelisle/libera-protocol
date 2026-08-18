@@ -88,6 +88,17 @@ void Receiver::dispatchRecord(const Record& record) {
         }
         break;
     }
+    case RecordType::Reject: {
+        Reject reject;
+        if (!decodeReject(record.payload.data(), record.payload.size(), reject, error)) {
+            reportError(error);
+            return;
+        }
+        if (callbacksValue.onReject) {
+            callbacksValue.onReject(reject);
+        }
+        break;
+    }
     case RecordType::StreamConfig: {
         StreamConfig config;
         if (!decodeStreamConfig(record.payload.data(), record.payload.size(), config, error)) {

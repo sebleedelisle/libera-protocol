@@ -26,6 +26,10 @@ std::vector<std::uint8_t> Sender::makeAccept(const Accept& accept) {
     return makeRecord(RecordType::Accept, encodeAccept(accept));
 }
 
+std::vector<std::uint8_t> Sender::makeReject(const Reject& reject) {
+    return makeRecord(RecordType::Reject, encodeReject(reject));
+}
+
 std::vector<std::uint8_t> Sender::makeReady() {
     return makeRecord(RecordType::Ready);
 }
